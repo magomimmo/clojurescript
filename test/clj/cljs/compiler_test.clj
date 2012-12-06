@@ -67,22 +67,22 @@
          ;; real cases
 
          ;; exclude a single source file (standard) by passing it in a
-         ;; vector 
+         ;; vector
          (set (get-file-names file-paths [0]))
          (c/exclude-file-names "__dir" ["file1.cljs"])
 
          ;; ;; exclude a single source file (standard) by passing it as a
-         ;; ;; string  
+         ;; ;; string
          ;; (set (get-file-names file-paths [0]))
          ;; (c/exclude-file-names "__dir" "file1.cljs")
 
          ;; exclude a single directory (standard) by passing it in a
-         ;; vector 
+         ;; vector
          (set (get-file-names file-paths [2 3 4]))
          (c/exclude-file-names "__dir" ["dir2"])
 
          ;; ;; exclude a single directory (standard) by passing it as a
-         ;; ;; string 
+         ;; ;; string
          ;; (set (get-file-names file-paths [2 3 4]))
          ;; (c/exclude-file-names "__dir" "dir2")
 
@@ -97,13 +97,6 @@
          ;; exclude all by using "." (border)
          (set file-paths)
          (c/exclude-file-names "__dir" ["."])
-
-         ;; (set file-paths)
-         ;; (c/exclude-file-names "__dir" ".")
-
-         ;; exclude all by using ".." (border)
-         ;; (set file-paths) (c/exclude-file-names "__dir" [".."])
-
 
          )
   (clear-context)
