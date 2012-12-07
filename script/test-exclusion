@@ -1,0 +1,8 @@
+#!/bin/sh
+
+rm -rf out
+mkdir -p out
+
+echo "Testing exclude all cljs source from compilation..."
+bin/cljsc test '{:optimizations :whitespace :exclude ["cljs"] :output-to "out/exclude-all-test.js"}'
+echo "...done."

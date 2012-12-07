@@ -901,7 +901,7 @@
 
 (defn exclude-file-names [dir exclude-vec]
   "Return a set of files to be excluded"
-  (when (and dir (vector? exclude-vec))
+  (when  (and dir (vector? exclude-vec))
     (set (filter #(.endsWith ^String % ".cljs")
                  (map #(.getCanonicalPath ^java.io.File %)
                       (mapcat #(let [file (io/file (str dir) %)]

@@ -24,7 +24,7 @@
         options (when (> (count opts-string) 1)
                   (try (read-string opts-string)
                        (catch Exception e (println e))))]
-
+    
     {:source source
      :options (merge {:output-to :print} options {:exclude exclude-vec})}))
 
