@@ -25,7 +25,10 @@
   ([f init coll]
      (if (map? coll)
        (-kv-reduce coll f init)
-       (-reduce coll f init))))
+       (cond
+         (nil? coll) init
+         (array? coll) (array-reduce coll f init)
+         :else (-reduce coll f init)))))
 
 #_
 (defprotocol CollFold
@@ -223,7 +226,7 @@
 (defn append!
   ".adds x to acc and returns acc"
   [acc x]
-  (doto acc (.add x)))
+  (doto acc (.push x)))
 
 (defn foldcat
   "Equivalent to (fold cat append! coll)"

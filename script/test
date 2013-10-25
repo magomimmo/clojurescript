@@ -7,7 +7,7 @@ possible=3
 ran=0
 
 #bin/cljsc test >out/core-test.js
-bin/cljsc test "{:optimizations :advanced}" >out/core-advanced-test.js
+bin/cljsc test "{:optimizations :advanced :output-wrapper true}" >out/core-advanced-test.js
 
 if [ "$V8_HOME" = "" ]; then
   echo "V8_HOME not set, skipping V8 tests"
@@ -23,7 +23,7 @@ if [ "$SPIDERMONKEY_HOME" = "" ]; then
   echo "SPIDERMONKEY_HOME not set, skipping SpiderMonkey tests"
 else
   echo "Testing with SpiderMonkey"
-  ${SPIDERMONKEY_HOME}/js -m -n -a -f out/core-advanced-test.js
+  ${SPIDERMONKEY_HOME}/js -m -a -f out/core-advanced-test.js
   ran=$[ran+1]
 fi
 
