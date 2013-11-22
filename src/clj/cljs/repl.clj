@@ -13,6 +13,7 @@
             [clojure.java.io :as io]
             [cljs.compiler :as comp]
             [cljs.analyzer :as ana]
+            [cljs.env :as env]
             [cljs.tagged-literals :as tags]
             [cljs.closure :as cljsc]))
 
@@ -24,6 +25,15 @@
   (-load [this ns url] "load code at url into the environment")
   (-tear-down [this] "dispose of the environment"))
 
+(defn- env->opts
+  "Returns a hash-map containing all of the entries in [repl-env], translating
+:working-dir to :output-dir."
+  [repl-env]
+  ; some bits in cljs.closure use the options value as an ifn :-/
+  (-> (into {} repl-env)
+      (assoc :optimizations (get repl-env :optimizations :none))
+      (assoc :output-dir (get repl-env :working-dir ".repl"))))
+
 (defn load-namespace
   "Load a namespace and all of its dependencies into the evaluation environment.
   The environment is responsible for ensuring that each namespace is loaded once and
@@ -33,8 +43,8 @@
                      (= (first sym) 'quote))
               (second sym)
               sym)
-        opts {:output-dir (get repl-env :working-dir ".repl")}
-        deps (->> (cljsc/add-dependencies opts {:requires [(name sym)] :type :seed})
+        deps (->> (cljsc/add-dependencies (env->opts repl-env)
+                                          {:requires [(name sym)] :type :seed})
                   (remove (comp #{["goog"]} :provides))
                   (remove (comp #{:seed} :type))
                   (map #(select-keys % [:provides :url])))]
@@ -126,7 +136,7 @@
     {'in-ns (fn [_ quoted-ns]
               (let [ns-name (second quoted-ns)]
                 (when-not (ana/get-namespace ns-name)
-                  (ana/set-namespace ns-name {:name ns-name}))
+                  (swap! env/*compiler* update-in [::ana/namespaces ns-name] {:name ns-name}))
                 (set! ana/*cljs-ns* ns-name)))
      'load-file load-file-fn
      'clojure.core/load-file load-file-fn
@@ -134,7 +144,7 @@
 
 (defn analyze-source
   "Given a source directory, analyzes all .cljs files. Used to populate
-  cljs.analyzer/namespaces so as to support code reflection."
+  (:cljs.analyzer/namespaces compiler-env) so as to support code reflection."
   [src-dir]
   (if-let [src-dir (and (not (empty? src-dir))
                      (File. src-dir))]
@@ -144,39 +154,46 @@
 (defn repl
   "Note - repl will reload core.cljs every time, even if supplied old repl-env"
   [repl-env & {:keys [analyze-path verbose warn-on-undeclared special-fns static-fns]}]
-  (prn "Type: " :cljs/quit " to quit")
-  (binding [ana/*cljs-ns* 'cljs.user
-            *cljs-verbose* verbose
-            ana/*cljs-warnings* (assoc ana/*cljs-warnings*
-                                  :undeclared warn-on-undeclared)
-            ana/*cljs-static-fns* static-fns]
-    (when analyze-path
-      (analyze-source analyze-path))
-    (let [env {:context :expr :locals {}}
-          special-fns (merge default-special-fns special-fns)
-          is-special-fn? (set (keys special-fns))
-          read-error (Object.)]
-      (-setup repl-env)
-      (loop [forms (ana/forms-seq *in* "NO_SOURCE_FILE")]
-        (print (str "ClojureScript:" ana/*cljs-ns* "> "))
-        (flush)
-        (let [form (try
-                     (binding [*data-readers* tags/*cljs-data-readers*]
-                       (first forms))
-                     (catch Exception e
-                       (println (.getMessage e))
-                       read-error))]
-          (cond
-           (identical? form read-error) (recur (ana/forms-seq *in* "NO_SOURCE_FILE"))
-           
-           (= form :cljs/quit) :quit
+  (print "To quit, type: ")
+  (prn :cljs/quit)
+  (env/with-compiler-env
+    (or (::env/compiler repl-env) (env/default-compiler-env))
+    (binding [ana/*cljs-ns* 'cljs.user
+              *cljs-verbose* verbose
+              ana/*cljs-warnings* (assoc ana/*cljs-warnings*
+                                    :undeclared-var warn-on-undeclared
+                                    :undeclared-ns warn-on-undeclared
+                                    :undeclared-ns-form warn-on-undeclared)
+              ana/*cljs-static-fns* static-fns]
+      (when analyze-path
+        (analyze-source analyze-path))
+      (let [env {:context :expr :locals {}}
+            special-fns (merge default-special-fns special-fns)
+            is-special-fn? (set (keys special-fns))
+            read-error (Object.)]
+        (-setup repl-env)
+        (loop [forms (ana/forms-seq *in* "NO_SOURCE_FILE")]
+          (print (str "ClojureScript:" ana/*cljs-ns* "> "))
+          (flush)
+          (let [form (try
+                       (binding [*data-readers* tags/*cljs-data-readers*]
+                         (if (seq forms)
+                           (first forms)
+                           :cljs/quit))
+                       (catch Exception e
+                         (println (.getMessage e))
+                         read-error))]
+            (cond
+             (identical? form read-error) (recur (ana/forms-seq *in* "NO_SOURCE_FILE"))
+             
+             (= form :cljs/quit) :quit
 
-           (and (seq? form) (is-special-fn? (first form)))
-           (do (apply (get special-fns (first form)) repl-env (rest form))
-               (newline)
-               (recur (rest forms)))
+             (and (seq? form) (is-special-fn? (first form)))
+             (do (apply (get special-fns (first form)) repl-env (rest form))
+                 (newline)
+                 (recur (rest forms)))
 
-           :else
-           (do (eval-and-print repl-env env form)
-               (recur (rest forms))))))
-      (-tear-down repl-env))))
+             :else
+             (do (eval-and-print repl-env env form)
+                 (recur (rest forms))))))
+        (-tear-down repl-env)))))

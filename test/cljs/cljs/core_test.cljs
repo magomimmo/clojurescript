@@ -473,18 +473,13 @@
     (assert (empty? e-hmap))
     (assert (= {:b :c} (meta e-hmap))))
 
-  ;;this fails in v8 advanced mode - what's e?
-  #_(let [a (atom nil)]
-    (assert (= 1 (try* 1)))
-    (assert (= 2 (try* 1 (throw 3) (catch e 2))))
-    (assert (= 3 (try* 1 (throw 3) (catch e e))))
-    (assert (= 1 (try* 1 (finally (reset! a 42)))))
-    (assert (= 42 (deref a))))
-
   (let [a (atom nil)]
     (assert (= 1 (try 1)))
     (assert (= 2 (try 1 (throw (js/Error.)) (catch js/Error e 2))))
     (assert (= 2 (try 1 (throw (js/Error.)) (catch js/Error e 1 2))))
+    (assert (= 2 (try 1 (throw (js/Error.)) (catch js/Error e 2) (catch :default e 3))))
+    (assert (= 3 (try 1 (throw true) (catch js/Error e 2) (catch :default e 3))))
+    (assert (= 2 (try 1 (throw 2) (catch js/Error e 3) (catch :default e e))))
     (assert (= 1 (try 1 (finally (reset! a 42)))))
     (assert (= 42 (deref a))))
 
@@ -1423,9 +1418,12 @@
   (assert (false? (= fred nil)))
   (assert (false? (= nil fred)))
 
-  (def ethel (Person. "Ethel" "Mertz" {:married true} {:husband :fred}))
+  ;; invalid tests, cannot set meta and extmap directly - David
+  (def ethel (with-meta (assoc (Person. "Ethel" "Mertz") :husband :fred)
+               {:married true}))
   (assert (= (meta ethel) {:married true}))
-  (def ethel-too (Person. "Ethel" "Mertz" {:married true} {:husband :fred}))
+  (def ethel-too (with-meta (assoc (Person. "Ethel" "Mertz")  :husband :fred)
+                   {:married true}))
   (assert (= ethel ethel-too))
 
   (assert (= (map->Person {:firstname "Fred" :lastname "Mertz"}) fred))
@@ -1642,11 +1640,11 @@
   (assert (= -1 (compare 'a 'b)))
   ;; cases involving ns
   (assert (= -1 (compare :b/a :c/a)))
-  #_(assert (= -1 (compare :c :a/b)))
-  #_(assert (=  1 (compare :a/b :c)))
+  (assert (= -1 (compare :c :a/b)))
+  (assert (=  1 (compare :a/b :c)))
   (assert (= -1 (compare 'b/a 'c/a)))
-  #_(assert (= -1 (compare 'c 'a/b)))
-  #_(assert (=  1 (compare 'a/b 'c)))
+  (assert (= -1 (compare 'c 'a/b)))
+  (assert (=  1 (compare 'a/b 'c)))
 
   ;; This is different from clj. clj gives -2 next 3 tests
   (assert (= -1 (compare "a" "c")))
@@ -1936,11 +1934,11 @@
   ;; CLJS-541
   (letfn [(f! [x] (print \f) x)
           (g! [x] (print \g) x)]
-    (assert (== "ffgfg"
-                (with-out-str
-                  (instance? Symbol (f! 'foo))
-                  (max (f! 5) (g! 10))
-                  (min (f! 5) (g! 10))))))
+    (assert (= "ffgfg"
+               (with-out-str
+                 (instance? Symbol (f! 'foo))
+                 (max (f! 5) (g! 10))
+                 (min (f! 5) (g! 10))))))
 
   ;; CLJS-582
   (assert (= #{1 2} (set [1 2 2])))
@@ -1970,6 +1968,53 @@
 
   ;; CLJS-608
   (assert (= '("") (re-seq #"\s*" "")))
+
+  ;; CLJS-638
+
+  (deftype KeywordTest []
+    ILookup
+    (-lookup [o k] :nothing)
+    (-lookup [o k not-found] not-found))
+
+  (assert (= (:a (KeywordTest.)) :nothing))
+
+  ;; CLJS-648 (CLJ-1285)
+  (let [a (reify IHash (-hash [_] 42))
+        b (reify IHash (-hash [_] 42))
+        s (set (range 128))]
+    (assert (= (-> (conj s a b) transient (disj! a) persistent! (conj a))
+               (-> (conj s a b) transient (disj! a) persistent! (conj a)))))
+
+  ;; CLJS-660
+
+  (assert (= (-> 'a.b keyword ((juxt namespace name))) [nil "a.b"]))
+  (assert (= (-> 'a.b/c keyword ((juxt namespace name))) ["a.b" "c"]))
+  (assert (= (-> "a.b" keyword ((juxt namespace name))) [nil "a.b"]))
+  (assert (= (-> "a.b/c" keyword ((juxt namespace name))) ["a.b" "c"]))
+
+  ;; CLJS-663
+
+  (assert (= (keyword 123) nil))
+  (assert (= (keyword (js/Date.)) nil))
+
+  ;; CLJS-647
+  (let [keys #(vec (js-keys %))
+        z "x"]
+    (assert (= ["x"]
+               (keys (js-obj "x" "y"))
+               (keys (js-obj (identity "x") "y"))
+               (keys (js-obj z "y")))))
+
+  ;; CLJS-583
+
+  (def some-x 1)
+  (def some-y 1)
+
+  (assert (= (count #{some-x some-y}) 1))
+
+  ;; CLJS-584
+
+  (assert (= (count {some-x :foo some-y :bar}) 1))
 
   :ok
   )
